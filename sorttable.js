@@ -28,57 +28,21 @@ const sorttable = {
       document.querySelectorAll(sorttable.selectorTables).forEach(sorttable.makeSortable);
    },
 
-   insertTheadInTable(tableElement) {
-      if (!tableElement.getElementsByTagName('thead').length) {
-         const theadElement = document.createElement('thead');
-         theadElement.appendChild(tableElement.rows[0]);
-         tableElement.insertBefore(theadElement, tableElement.firstChild);
-      }
-   },
+   innerSortFunction(event, tableElement) {
+      // Set wait cursor
+      setTableCursor('wait');
 
-   innerSortFunction(event) {
-      if (this.classList.contains(sorttable.classSorted)) {
-         // Reverse table if already sorted by this column
+      const isSortedAscending = this.classList.contains(sorttable.classSorted);
+      const isSortedDescending = this.classList.contains(sorttable.classSortedReverse);
+
+      if (isSortedAscending || isSortedDescending) {
          sorttable.reverse(this.sorttable_tbody);
-         updateSortClasses(this, false);
-         document.getElementById(sorttable.idSorttableSortfwdind)?.remove();
 
-         const sortrevind = document.createElement('span');
-         sortrevind.id = sorttable.idSorttableSortfrevind;
-         sortrevind.innerHTML = sorttable.iconUp;
-         this.appendChild(sortrevind);
+         updateSortIndicators(this, isSortedDescending);
 
          event.preventDefault();
          return;
       }
-
-      if (this.classList.contains(sorttable.classSortedReverse)) {
-         // Re-reverse table if already sorted by this column in reverse
-         sorttable.reverse(this.sorttable_tbody);
-         updateSortClasses(this, true);
-         document.getElementById(sorttable.idSorttableSortfwdind)?.remove();
-
-         const sortfwdind = document.createElement('span');
-         sortfwdind.id = sorttable.idSorttableSortfwdind;
-         sortfwdind.innerHTML = sorttable.iconDown;
-         this.appendChild(sortfwdind);
-
-         event.preventDefault();
-         return;
-      }
-
-      // Remove sorttable_sorted classes
-      this.parentNode.querySelectorAll('th').forEach(cell => cell.classList.remove(sorttable.classSortedReverse, sorttable.classSorted));
-
-      document.getElementById(sorttable.idSorttableSortfwdind)?.remove();
-      document.getElementById(sorttable.idSorttableSortfrevind)?.remove();
-
-      updateSortClasses(this, true);
-
-      const sortfwdind = document.createElement('span');
-      sortfwdind.id = sorttable.idSorttableSortfwdind;
-      sortfwdind.innerHTML = sorttable.iconDown;
-      this.appendChild(sortfwdind);
 
       // Build an array to sort. Decorate each row with the actual sort key
       const rowArray = [];
@@ -93,61 +57,85 @@ const sorttable = {
       // sorttable.shakerSort(rowArray, this.sorttable_sortfunction);
       rowArray.sort(this.sorttable_sortfunction);
 
+      updateSortIndicators(this, true);
+
       const tb = this.sorttable_tbody;
+      const fragment = document.createDocumentFragment();
       for (let j = 0; j < rowArray.length; j++) {
-         tb.appendChild(rowArray[j][1]);
+         fragment.appendChild(rowArray[j][1]);
       }
+      tb.appendChild(fragment);
 
       event.preventDefault();
 
-      function updateSortClasses(cell, ascending = true) {
-         cell.classList.remove(sorttable.classSorted, sorttable.classSortedReverse);
-         cell.classList.add(ascending ? sorttable.classSorted : sorttable.classSortedReverse);
+      function updateSortIndicators(headerCell, sortAscending) {
+         const { id, icon } = sortAscending
+            ? { id: sorttable.idSorttableSortfwdind, icon: sorttable.iconDown }
+            : { id: sorttable.idSorttableSortfrevind, icon: sorttable.iconUp };
+
+         // Remove existing indicators
+         document.getElementById(sorttable.idSorttableSortfwdind)?.remove();
+         document.getElementById(sorttable.idSorttableSortfrevind)?.remove();
+
+         // Create and add new indicator based on sort direction
+         const sortIndicator = document.createElement('span');
+         sortIndicator.id = id;
+         sortIndicator.innerHTML = icon;
+         headerCell.appendChild(sortIndicator);
+
+         // Update sort classes
+         headerCell.classList.remove(sorttable.classSorted, sorttable.classSortedReverse);
+         headerCell.classList.add(sortAscending ? sorttable.classSorted : sorttable.classSortedReverse);
+
+         // Reset cursor after sorting
+         setTableCursor();
+      }
+
+      function setTableCursor(cursorStyle = null) {
+         tableElement.style.cursor = cursorStyle;
       }
    },
 
    makeSortable(tableElement) {
-      sorttable.insertTheadInTable(tableElement);
-
-      // Handle Safari not supporting table.tHead
+      // Ensure table header
       if (!tableElement.tHead) {
-         tableElement.tHead = tableElement.getElementsByTagName('thead')[0];
+         const thead = document.createElement('thead');
+         tableElement.insertBefore(thead, tableElement.firstChild);
       }
 
       if (tableElement.tHead.rows.length !== 1) return; // Can't cope with two header rows
 
       // Move rows with "sortbottom" class to tfoot for backwards compatibility
-      const sortbottomrows = [];
-      for (let i = 0; i < tableElement.rows.length; i++) {
-         if (tableElement.rows[i].classList.contains(sorttable.classSortBottom)) {
-            sortbottomrows.push(tableElement.rows[i]);
+      const sortbottomRows = Array.from(tableElement.rows).filter(row => row.classList.contains(sorttable.classSortBottom));
+      if (sortbottomRows.length) {
+         let tfoot = tableElement.tFoot;
+         if (!tfoot) {
+            tfoot = document.createElement('tfoot');
+            tableElement.appendChild(tfoot);
+         }
+
+         const fragment = document.createDocumentFragment();
+         sortbottomRows.forEach(row => fragment.appendChild(row));
+         tfoot.appendChild(fragment);
+      }
+
+      const headRow = tableElement.tHead.rows[0].cells;
+      for (let i = 0; i < headRow.length; i++) {
+         const cell = headRow[i];
+         if (!cell.classList.contains(sorttable.classNoSort)) {
+            const sortType = cell.className.match(sorttable.regexAnySorttableClass)?.[1];
+            cell.sorttable_sortfunction = sortType ? sorttable[`sort_${sortType}`] : sorttable.guessType(tableElement, i);
+            cell.sorttable_columnindex = i;
+            cell.sorttable_tbody = tableElement.tBodies[0];
          }
       }
 
-      if (sortbottomrows.length) {
-         if (!tableElement.tFoot) {
-            // Create tfoot if it doesn't exist
-            const tfootElement = document.createElement('tfoot');
-            tableElement.appendChild(tfootElement);
+      tableElement.tHead.addEventListener('click', evt => {
+         const target = evt.target;
+         if (target.tagName === 'TH' && !target.classList.contains(sorttable.classNoSort)) {
+            sorttable.innerSortFunction.call(target, evt, tableElement);
          }
-         sortbottomrows.forEach(row => tfootElement.appendChild(row));
-      }
-
-      // Work through each column and calculate its type
-      const headrow = tableElement.tHead.rows[0].cells;
-      for (let i = 0; i < headrow.length; i++) {
-         // Skip if class "sorttable_nosort" exists
-         if (!headrow[i].classList.contains(sorttable.classNoSort)) {
-            const sortType = headrow[i].className.match(sorttable.regexAnySorttableClass)?.[1];
-
-            headrow[i].sorttable_sortfunction = sortType ? sorttable[`sort_${sortType}`] : sorttable.guessType(tableElement, i);
-
-            // Make it clickable to sort
-            headrow[i].sorttable_columnindex = i;
-            headrow[i].sorttable_tbody = tableElement.tBodies[0];
-            headrow[i].addEventListener('click', sorttable.innerSortFunction);
-         }
-      }
+      });
    },
 
    // guessType(table, column) {
@@ -156,65 +144,68 @@ const sorttable = {
    // },
 
    // Memoization in guessType
-   guessedTypes: new WeakMap(),
+   guessedTypesCache: new WeakMap(),
 
    guessType(table, column) {
-      if (this.guessedTypes.has(table)) {
-         return this.guessedTypes.get(table)[column];
+      const tableCache = this.guessedTypesCache.get(table) || new Map();
+      if (tableCache.has(column)) {
+         return tableCache.get(column);
       }
 
-      const types = [];
+      const columnTypes = [];
       for (let i = 0; i < table.rows.length; i++) {
          const cell = table.rows[i].cells[column];
          if (cell.textContent?.trim()) {
-            types.push(sorttable.sort_alpha); // Assume alpha for non-blank rows
+            columnTypes.push(sorttable.sort_alpha); // Assume alpha for non-blank rows
             break;
          }
       }
 
-      this.guessedTypes.set(table, types);
-      return types[column];
+      tableCache.set(column, columnType);
+      this.guessedTypesCache.set(table, tableCache);
+      return columnType;
    },
 
+   // Memoization in innerText
+   innerTextCache: new WeakMap(),
+
    getInnerText(node) {
-      // Get the text for sorting a cell, stripping leading/trailing whitespace
-      // Handles customkey attribute and input fields
       if (!node) return '';
 
       // Prioritize data-value attribute for custom sort keys
       if (node.dataset && node.dataset.value) return node.dataset.value;
 
-      const hasInputs = typeof node.getElementsByTagName === 'function' && node.getElementsByTagName('input').length;
-
       // Check for custom sort key attribute
-      if (node.getAttribute('sorttable_customkey')) return node.getAttribute('sorttable_customkey');
+      if (customkey = node.getAttribute('sorttable_customkey')) return customkey;
 
+      const cachedValue = sorttable.innerTextCache.get(node);
+      if (cachedValue !== undefined) return cachedValue;
+
+      const hasInputs = typeof node?.getElementsByTagName === 'function' && node.getElementsByTagName('input').length;
       const textContent = node.textContent?.trim() || node.innerText?.trim() || node.text?.trim();
-
       if (textContent && !hasInputs) return textContent;
 
+      let innerText = '';
       switch (node.nodeType) {
-         case 3:
-            if (node.nodeName.toLowerCase() === 'input') return node.value.trim();
+         case 3: // Node.TEXT_NODE
+            if (node.nodeName.toLowerCase() === 'input') innerText = node.value.trim();
             break;
-         case 4:
-            return node.nodeValue.trim();
-         case 1:
-         case 11:
-            let innerText = '';
+         // case 11: // Node.DOCUMENT_FRAGMENT_NODE (xml)
+         case 1: // Node.ELEMENT_NODE
             for (let i = 0; i < node.childNodes.length; i++) {
                innerText += sorttable.getInnerText(node.childNodes[i]);
             }
-            return innerText.trim();
-         default:
-            return '';
+            break;
       }
+
+      sorttable.innerTextCache.set(node, innerText.trim());
+      return innerText.trim();
    },
 
    reverse(tbody) {
       // Reverse table body rows efficiently
-      const newrows = Array.from(tbody.rows);
-      newrows.reverse().forEach(row => tbody.appendChild(row));
+      const newrows = Array.from(tbody.rows).reverse();
+      newrows.forEach(row => tbody.appendChild(row));
    },
 
    // Sort functions (comparison logic goes here)
