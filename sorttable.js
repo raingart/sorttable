@@ -62,9 +62,9 @@ const sorttable = {
       const tb = this.sorttable_tbody;
       const fragment = document.createDocumentFragment();
       for (let j = 0; j < rowArray.length; j++) {
-         fragment.appendChild(rowArray[j][1]);
+         fragment.append(rowArray[j][1]);
       }
-      tb.appendChild(fragment);
+      tb.append(fragment);
 
       event.preventDefault();
 
@@ -81,7 +81,7 @@ const sorttable = {
          const sortIndicator = document.createElement('span');
          sortIndicator.id = id;
          sortIndicator.innerHTML = icon;
-         headerCell.appendChild(sortIndicator);
+         headerCell.append(sortIndicator);
 
          // Update sort classes
          headerCell.classList.remove(sorttable.classSorted, sorttable.classSortedReverse);
@@ -111,12 +111,12 @@ const sorttable = {
          let tfoot = tableElement.tFoot;
          if (!tfoot) {
             tfoot = document.createElement('tfoot');
-            tableElement.appendChild(tfoot);
+            tableElement.append(tfoot);
          }
 
          const fragment = document.createDocumentFragment();
-         sortbottomRows.forEach(row => fragment.appendChild(row));
-         tfoot.appendChild(fragment);
+         sortbottomRows.forEach(row => fragment.append(row));
+         tfoot.append(fragment);
       }
 
       const headRow = tableElement.tHead.rows[0].cells;
@@ -205,7 +205,7 @@ const sorttable = {
    reverse(tbody) {
       // Reverse table body rows efficiently
       const newrows = Array.from(tbody.rows).reverse();
-      newrows.forEach(row => tbody.appendChild(row));
+      newrows.forEach(row => tbody.append(row));
    },
 
    // Sort functions (comparison logic goes here)
